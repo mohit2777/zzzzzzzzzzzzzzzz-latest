@@ -1,7 +1,7 @@
 /**
  * WhatsApp Manager - Optimized Version
  * Focused on minimal RAM usage and reliable session persistence
- * Uses RemoteAuth for database-backed session storage (Ranger-4 approach)
+ * Uses SupabaseAuth for database-backed session storage (file-based)
  */
 
 const { Client, MessageMedia } = require('whatsapp-web.js');
@@ -10,17 +10,17 @@ const { v4: uuidv4 } = require('uuid');
 const { db } = require('../config/database');
 const axios = require('axios');
 const logger = require('./logger');
-const RemoteAuth = require('./RemoteAuth');
+const { SupabaseAuth, preRestoreSession } = require('./SupabaseAuth');
 const webhookDeliveryService = require('./webhookDeliveryService');
 
-// Memory thresholds - aggressive for low-RAM environments (512MB Render free tier)
-const MEMORY_WARNING_THRESHOLD = 350 * 1024 * 1024; // 350MB
-const MEMORY_CRITICAL_THRESHOLD = 450 * 1024 * 1024; // 450MB
+// Memory thresholds
+const MEMORY_WARNING_THRESHOLD = 350 * 1024 * 1024;
+const MEMORY_CRITICAL_THRESHOLD = 450 * 1024 * 1024;
 
-// Puppeteer config - Ranger-4 approach: Let whatsapp-web.js handle Chrome
-// No explicit executablePath - allows whatsapp-web.js to download Chromium if needed
+// Puppeteer config - uses Chrome from Docker or env var
 const PUPPETEER_CONFIG = {
   headless: true,
+  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
   args: [
     '--no-sandbox',
     '--disable-setuid-sandbox',
@@ -145,14 +145,17 @@ class WhatsAppManager {
         description: description,
         status: 'initializing',
         created_at: new Date().toISOString(),
-        metadata: { created_by: 'system', version: '3.0', auth: 'remote' }
+        metadata: { created_by: 'system', version: '3.0', auth: 'supabase' }
       };
 
       const account = await db.createAccount(accountData);
 
-      // Create client with RemoteAuth (database-backed sessions)
+      // Pre-restore session from Supabase if exists
+      await preRestoreSession(accountId, './wa-sessions-temp');
+
+      // Create client with SupabaseAuth (file-based database sessions)
       const client = new Client({
-        authStrategy: new RemoteAuth({
+        authStrategy: new SupabaseAuth({
           accountId: accountId,
           dataPath: './wa-sessions-temp'
         }),
@@ -697,9 +700,12 @@ class WhatsAppManager {
 
       this.qrCodes.delete(account.id);
 
-      // Create client with RemoteAuth (database-backed sessions)
+      // Pre-restore session from Supabase if exists
+      await preRestoreSession(account.id, './wa-sessions-temp');
+
+      // Create client with SupabaseAuth (file-based database sessions)
       const client = new Client({
-        authStrategy: new RemoteAuth({
+        authStrategy: new SupabaseAuth({
           accountId: account.id,
           dataPath: './wa-sessions-temp'
         }),
@@ -720,7 +726,7 @@ class WhatsAppManager {
 
       client.initialize()
         .then(() => {
-          logger.info(`Client init started for ${account.name} [RemoteAuth]`);
+          logger.info(`Client init started for ${account.name} [SupabaseAuth]`);
         })
         .catch(async (error) => {
           logger.error(`Init error for ${account.id}:`, error);
