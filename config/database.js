@@ -185,7 +185,7 @@ const messageQueue = new MessageQueue();
  * Retry helper for database operations with exponential backoff
  * Handles temporary Supabase 5xx errors gracefully
  */
-async function withRetry(fn, operationName, maxRetries = 3) {
+async function withRetry(fn, operationName, maxRetries = 5) {
   let lastError;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -194,23 +194,26 @@ async function withRetry(fn, operationName, maxRetries = 3) {
       lastError = error;
 
       // Check if it's a retryable error (5xx, network issues)
+      const errorMsg = error?.message || '';
       const isRetryable =
         error?.code === 'PGRST500' ||
         error?.code === 'PGRST520' ||
-        error?.message?.includes('520') ||
-        error?.message?.includes('502') ||
-        error?.message?.includes('503') ||
-        error?.message?.includes('504') ||
-        error?.message?.includes('fetch failed') ||
-        error?.message?.includes('network') ||
-        error?.message?.includes('ECONNRESET') ||
-        error?.message?.includes('ETIMEDOUT');
+        errorMsg.includes('520') ||
+        errorMsg.includes('502') ||
+        errorMsg.includes('503') ||
+        errorMsg.includes('504') ||
+        errorMsg.includes('fetch failed') ||
+        errorMsg.includes('network') ||
+        errorMsg.includes('ECONNRESET') ||
+        errorMsg.includes('ECONNREFUSED') ||
+        errorMsg.includes('ETIMEDOUT') ||
+        errorMsg.includes('socket hang up');
 
       if (!isRetryable || attempt === maxRetries) {
         throw lastError;
       }
 
-      const delay = 1000 * Math.pow(2, attempt - 1); // Exponential backoff: 1s, 2s, 4s
+      const delay = 1000 * Math.pow(2, attempt - 1); // Exponential backoff: 1s, 2s, 4s, 8s, 16s
       logger.warn(`[DB Retry] ${operationName} failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
