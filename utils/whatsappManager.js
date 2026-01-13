@@ -17,10 +17,9 @@ const webhookDeliveryService = require('./webhookDeliveryService');
 const MEMORY_WARNING_THRESHOLD = 350 * 1024 * 1024;
 const MEMORY_CRITICAL_THRESHOLD = 450 * 1024 * 1024;
 
-// Puppeteer config - uses Chrome from Docker or env var
+// Puppeteer config - let whatsapp-web.js/puppeteer handle Chromium
 const PUPPETEER_CONFIG = {
   headless: true,
-  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
   args: [
     '--no-sandbox',
     '--disable-setuid-sandbox',

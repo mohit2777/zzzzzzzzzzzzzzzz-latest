@@ -10,7 +10,8 @@
     "start:gc": "node --expose-gc index.js",
     "dev": "nodemon index.js",
     "dev:lite": "nodemon index.lite.js",
-    "dev:optimized": "nodemon index.optimized.js"
+    "dev:optimized": "nodemon index.optimized.js",
+    "postinstall": "npx puppeteer browsers install chrome"
   },
   "keywords": [
     "whatsapp",
